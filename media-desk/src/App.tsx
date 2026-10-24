@@ -1,122 +1,162 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import React, { useState } from 'react';
+import { INITIAL_LOANS } from './data/mockLoans';
+import type { FilterProcessState, LoanRequest, SearchCriteria } from './types/loan';
+import { WorkspaceSection } from './components/WorkspaceSection';
+import { StatusIndicator } from './components/StatusIndicator';
+import { SearchForm } from './components/SearchForm';
+import { LoanCard } from './components/LoanCard';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+export function App(): React.ReactElement {
+  const [loans] = useState<LoanRequest[]>(INITIAL_LOANS);
+  const [filteredLoans, setFilteredLoans] = useState<LoanRequest[]>(INITIAL_LOANS);
+  const [markedCodes, setMarkedCodes] = useState<string[]>([]);
+  const [isFiltering, setIsFiltering] = useState<boolean>(false);
+  const [lastUpdated, setLastUpdated] = useState<string>(
+    new Date().toLocaleTimeString()
+  );
+
+  // Firma explícita para recibir criterios desde el formulario hijo
+  const handleSearchCriteria = (criteria: SearchCriteria): void => {
+    setIsFiltering(true);
+
+    // Transición observable breve (250ms) para evidenciar el cambio en StatusIndicator
+    window.setTimeout(() => {
+      const normalizedQuery = criteria.query.toLowerCase();
+
+      const results = loans.filter((item) => {
+        const matchesQuery =
+          normalizedQuery === '' ||
+          item.resourceName.toLowerCase().includes(normalizedQuery) ||
+          item.requester.toLowerCase().includes(normalizedQuery) ||
+          item.code.toLowerCase().includes(normalizedQuery);
+
+        const matchesStatus =
+          criteria.statusFilter === 'todos' || item.status === criteria.statusFilter;
+
+        return matchesQuery && matchesStatus;
+      });
+
+      setFilteredLoans(results);
+      setLastUpdated(new Date().toLocaleTimeString());
+      setIsFiltering(false);
+    }, 250);
+  };
+
+  // Alterna (toggle) la marca de revisión de forma inmutable al pulsar una o dos veces
+  const handleToggleReview = (code: string): void => {
+    setMarkedCodes((prevCodes) =>
+      prevCodes.includes(code)
+        ? prevCodes.filter((itemCode) => itemCode !== code)
+        : [...prevCodes, code]
+    );
+  };
+
+  const indicatorState: FilterProcessState = {
+    isFiltering,
+    totalMatches: filteredLoans.length,
+    lastUpdated,
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="mediadesk-container">
+      <header className="main-header">
+        <h1>MediaDesk</h1>
+        <p>Panel de Préstamo de Equipo Audiovisual — Laboratorio Universitario</p>
+      </header>
+
+      {/* Primer uso de WorkspaceSection: agrupa buscador, indicador y resultados */}
+      <WorkspaceSection
+        title="Consulta y Revisión de Solicitudes"
+        subtitle="Filtra por nombre de equipo, estudiante solicitante o estado operativo."
+      >
+        <SearchForm onSearch={handleSearchCriteria} />
+
+        {/* Uso de StatusIndicator con Function as a Child */}
+        <StatusIndicator state={indicatorState}>
+          {(currentState) =>
+            currentState.isFiltering ? (
+              <span className="status-processing">
+                ⏳ Procesando criterios y filtrando inventario audiovisual...
+              </span>
+            ) : (
+              <span className="status-ready">
+                ✅ Lista disponible: <strong>{currentState.totalMatches}</strong>{' '}
+                {currentState.totalMatches === 1 ? 'resultado encontrado' : 'resultados encontrados'}{' '}
+                (Actualizado a las {currentState.lastUpdated})
+              </span>
+            )
+          }
+        </StatusIndicator>
+
+        <div className="results-counter-banner">
+          <span>Mostrando {filteredLoans.length} de {loans.length} solicitudes registradas</span>
+          <span>Marcadas para revisión: <strong>{markedCodes.length}</strong></span>
         </div>
-        <div>
-          <h1>Get started</h1>
+
+        {filteredLoans.length === 0 ? (
+          <div className="empty-results">
+            <p>No se encontraron solicitudes que coincidan con los criterios de búsqueda.</p>
+          </div>
+        ) : (
+          <div className="loans-grid">
+            {filteredLoans.map((loan, index) => {
+              const isMarked = markedCodes.includes(loan.code);
+
+              // Comprobación del Paso 3:
+              // El primer elemento (index === 0) omite las props opcionales 'density' y 'secondaryTag'
+              // para demostrar que toma los valores predeterminados ('normal' e 'Inventario Estándar').
+              // Los demás elementos proporcionan explícitamente las props opcionales.
+              if (index === 0) {
+                return (
+                  <LoanCard
+                    key={loan.code}
+                    loan={loan}
+                    isMarkedForReview={isMarked}
+                    onToggleReview={handleToggleReview}
+                  />
+                );
+              }
+
+              return (
+                <LoanCard
+                  key={loan.code}
+                  loan={loan}
+                  isMarkedForReview={isMarked}
+                  onToggleReview={handleToggleReview}
+                  density="compacta"
+                  secondaryTag="Verificación Prioritaria"
+                />
+              );
+            })}
+          </div>
+        )}
+      </WorkspaceSection>
+
+      {/* Segundo uso de WorkspaceSection con contenido distinto (Resumen y Guía) */}
+      <WorkspaceSection
+        title="Resumen de Revisión y Guía Rápida del Laboratorio"
+        subtitle="Panel informativo independiente compuesto mediante React.ReactNode"
+      >
+        <div className="help-summary-block">
           <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+            <strong>Solicitudes marcadas actualmente ({markedCodes.length}):</strong>{' '}
+            {markedCodes.length > 0 ? markedCodes.join(', ') : 'Ninguna seleccionada.'}
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
           <ul>
             <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
+              <strong>Fechas ausentes:</strong> Las solicitudes en estado <em>Pendiente</em> pueden
+              no tener fecha de devolución confirmada hasta su aprobación en ventanilla.
             </li>
             <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
+              <strong>Acción de revisión:</strong> Pulsar el botón en una tarjeta alterna su marca en
+              la colección de seguimiento sin alterar el registro original.
             </li>
           </ul>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      </WorkspaceSection>
+    </div>
+  );
 }
 
-export default App
+export default App;
